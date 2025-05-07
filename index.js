@@ -3,11 +3,26 @@ const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuild
 const http = require('http');
 require('dotenv').config();
 
+// Проверка наличия токена
+if (!process.env.DISCORD_TOKEN) {
+  console.error('ОШИБКА: Токен Discord бота не найден в переменных окружения.');
+  console.error('Убедитесь, что файл .env создан и содержит DISCORD_TOKEN=ваш_токен_бота');
+  process.exit(1);
+}
+
+// Проверка наличия CLIENT_ID
+if (!process.env.CLIENT_ID) {
+  console.error('ОШИБКА: CLIENT_ID не найден в переменных окружения.');
+  console.error('Убедитесь, что файл .env содержит CLIENT_ID=id_вашего_приложения');
+  process.exit(1);
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers // Добавлен интент для работы с участниками сервера
   ]
 });
 
@@ -127,9 +142,36 @@ client.on('interactionCreate', async interaction => {
 });
 
 // Обработка ошибок
-client.on('error', console.error);
+client.on('error', error => {
+  console.error('Ошибка Discord клиента:', error);
+  
+  if (error.message.includes('TokenInvalid')) {
+    console.error('---------------------------------------------------');
+    console.error('ОШИБКА: Предоставлен недопустимый токен Discord бота.');
+    console.error('Возможные причины:');
+    console.error('1. Токен введен неверно или содержит ошибки');
+    console.error('2. Токен устарел или был сброшен');
+    console.error('3. Бот был удален из Discord Developer Portal');
+    console.error('---------------------------------------------------');
+    console.error('Решение:');
+    console.error('1. Проверьте токен в файле .env');
+    console.error('2. Создайте новый токен в Discord Developer Portal');
+    console.error('3. Перезапустите бота с правильным токеном');
+    console.error('---------------------------------------------------');
+    process.exit(1);
+  }
+});
+
 process.on('unhandledRejection', error => {
   console.error('Необработанная ошибка:', error);
+  
+  if (error.message.includes('TokenInvalid')) {
+    console.error('---------------------------------------------------');
+    console.error('ОШИБКА: Предоставлен недопустимый токен Discord бота.');
+    console.error('Перезапустите бота с правильным токеном в файле .env');
+    console.error('---------------------------------------------------');
+    process.exit(1);
+  }
 });
 
 // Создаем простой HTTP сервер для health checks на Render.com
@@ -147,5 +189,20 @@ server.listen(process.env.PORT || 3000, () => {
   console.log(`HTTP сервер запущен на порту ${process.env.PORT || 3000}`);
 });
 
-// Запуск бота
-client.login(process.env.DISCORD_TOKEN);
+// Запуск бота с обработкой ошибок
+try {
+  console.log('Попытка входа в систему...');
+  client.login(process.env.DISCORD_TOKEN)
+    .catch(error => {
+      console.error('Ошибка при входе:', error.message);
+      if (error.message.includes('TokenInvalid')) {
+        console.error('Недопустимый токен. Проверьте файл .env и убедитесь, что токен верный.');
+      } else if (error.message.includes('disallowed intents')) {
+        console.error('Ошибка интентов. Проверьте, что в Discord Developer Portal включены все необходимые интенты.');
+      }
+      process.exit(1);
+    });
+} catch (error) {
+  console.error('Критическая ошибка при запуске бота:', error);
+  process.exit(1);
+}
